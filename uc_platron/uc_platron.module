@@ -1,0 +1,250 @@
+<?php
+
+/**
+ * @file
+ * Integrates various Platron payment services with Ubercart!
+ *
+ *
+ */
+
+
+/*******************************************************************************
+ * Hook Functions (Drupal)
+ ******************************************************************************/
+
+/**
+ * Implements hook_menu().
+ */
+function uc_platron_menu() {
+  $items['uc_platron/success'] = array(
+    'title' => 'Platron payment success',
+    'page callback' => 'uc_platron_success',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'uc_platron.pages.inc',
+  );
+  $items['uc_platron/done'] = array(
+    'title' => 'Internal Data',
+    'page callback' => 'uc_platron_done_payment',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  'file' => 'uc_platron.pages.inc',
+  );  
+  $items['uc_platron/failure'] = array(
+    'title' => 'Platron payment cancelled',
+    'page callback' => 'uc_platron_failure',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'uc_platron.pages.inc',
+  );
+
+  return $items;
+}
+
+/*******************************************************************************
+ * Hook Functions (Ubercart)
+ ******************************************************************************/
+
+/**
+ * Implements hook_uc_payment_method().
+ */
+function uc_platron_uc_payment_method() {
+  $title = t('Platron payments services');
+
+  $methods[] = array(
+    'id' => 'platron',
+    'name' => t('Platron'),
+    'title' => $title,
+    'review' => t('Platron'),
+    'desc' => t('Redirect users to submit payments through Platron.'),
+    'callback' => 'uc_payment_method_platron',
+    'redirect' => 'uc_platron_form',
+    'weight' => 1,
+    'checkout' => FALSE,
+    'no_gateway' => TRUE,
+  );
+
+  return $methods;
+}
+
+
+/*******************************************************************************
+ * Callback Functions, Forms, and Tables
+ ******************************************************************************/
+
+/**
+ * Handles the Website Payments Standard payment method.
+ */
+function uc_payment_method_platron($op, &$order) {
+  switch ($op) {
+    case 'settings':
+      $form['uc_platron_test_mode'] = array(
+        '#type'          => 'checkbox',
+        '#title'         => t('Testing mode'),
+        '#default_value' => variable_get('uc_platron_test_mode', 1),
+      );
+    
+      $form['uc_platron_mid'] = array(
+        '#type'          => 'textfield',
+        '#title'         => t('Merchant id'),
+        '#default_value' => variable_get('uc_platron_mid', ''),
+      );
+      
+      $form['uc_platron_msec'] = array(
+        '#type'          => 'textfield',
+        '#title'         => t('Merchant Secret key'),
+        '#default_value' => variable_get('uc_platron_msec', ''),
+      );
+      
+      $form['uc_platron_pg_timeout'] = array(
+        '#type'          => 'textfield',
+        '#title'         => t('PG timeout'),
+        '#default_value' => variable_get('uc_platron_pg_timeout', 60*60*24*3),
+        '#description'   => t('In seconds'),
+      );
+
+      $form['statuses'] = array(
+        '#type' => 'fieldset',
+        '#collapsible' => TRUE,
+        '#collapsed' => TRUE,
+        '#title' => t('Order statuses'),
+      );
+	  foreach(uc_order_status_list() as $status) {
+	    $statuses[$status['state']][$status['id']] = $status['title'];
+      }
+
+      $form['statuses']['platron_inited'] = array(
+        '#type'  => 'select',
+        '#title'  => t('New order through platron'),
+        '#options'  => $statuses['post_checkout'],
+		'#default_value' => variable_get('uc_platron_inited_status', 'platron_inited'),
+      );	  
+      $form['statuses']['platron_ready_for_pay'] = array(
+        '#type'  => 'select',
+        '#title'  => t('Approved for pay'),
+        '#options'  => array_merge([''=>'disabled'],$statuses['post_checkout']),
+		'#default_value' => variable_get('uc_platron_ready_for_pay_status', ''),
+      );	  
+      $form['statuses']['payment_received'] = array(
+        '#type'  => 'select',
+        '#title'  => t('Payment received'),
+        '#options'  => $statuses['payment_received'],
+		'#default_value' => variable_get('uc_platron_payment_received_status', 'payment_received'),
+      );
+      $form['statuses']['canceled'] = array(
+        '#type'  => 'select',
+        '#title'  => t('Failed order'),
+        '#options'  => $statuses['canceled'],
+		'#default_value' => variable_get('uc_platron_canceled_status', 'canceled'),
+      );
+	  
+      $form['url'] = array(
+        '#type' => 'fieldset',
+        '#collapsible' => TRUE,
+        '#collapsed' => TRUE,
+        '#title' => t('Urls (check, success, failure) for merchant interfase'),
+      );
+      $form['url']['uc_platron_url_done'] = array(
+        '#type'  => 'textfield',
+        '#title'  => t('Check url, Result url'),
+        '#value'  => variable_get('uc_platron_url_done', url('uc_platron/done', array('absolute' => TRUE))),
+      );
+      $form['url']['uc_platron_url_success'] = array(
+        '#type'  => 'textfield',
+        '#title'  => t('Success url'),
+        '#value'  => variable_get('uc_platron_url_success', url('uc_platron/success', array('absolute' => TRUE))),
+      );
+      $form['url']['uc_platron_url_fail'] = array(
+        '#type'  => 'textfield',
+        '#title'  => t('Fail url'),
+        '#value'  => variable_get('uc_platron_url_fail', url('uc_platron/cancel', array('absolute' => TRUE))),
+      );
+      return $form;
+  }
+}
+
+
+/*******************************************************************************
+ * Module and Helper Functions
+ ******************************************************************************/
+
+/**
+ * Redirects customer to Platron payment services.
+ */
+function uc_platron_form($form, &$form_state) {
+  $order_id = intval($_SESSION['cart_order']);
+  
+  $order = uc_order_load($order_id);
+  if ($order === FALSE || uc_order_status_data($order->order_status, 'state') != 'in_checkout') {
+    $_SESSION['cart_order'] = NULL;
+    unset($_SESSION['cart_order']);
+    drupal_goto('cart');
+  }
+
+  $phone = $order->billing_phone;
+  if( empty($phone) ) $phone = $order->delivery_phone;
+  $params =[
+    'pg_request_method'    => 'POST',
+    'pg_check_url'      => variable_get('uc_platron_url_done', url('uc_platron/done', array('absolute' => TRUE))),
+    'pg_result_url'      => variable_get('uc_platron_url_done', url('uc_platron/done', array('absolute' => TRUE))),
+    'pg_success_url'    => variable_get('uc_platron_url_success', url('uc_platron/success', array('absolute' => TRUE))),
+    'pg_failure_url'    => variable_get('uc_platron_url_fail', url('uc_platron/cancel', array('absolute' => TRUE))),
+	'pg_user_ip'		=> $_SERVER['REMOTE_ADDR'],
+  
+    'pg_merchant_id'    => variable_get('uc_platron_mid', ''),
+    'pg_lifetime'      => variable_get('uc_platron_pg_timeout', 60*60*24*3),
+    'pg_salt'        => rand(21,43433),
+    'pg_testing_mode'    => variable_get('uc_platron_test_mode', 1),
+    'pg_payment_system'    => '',
+    
+    'pg_order_id'      => $order->order_id,
+    'pg_amount'        => $order->order_total,
+    'pg_user_phone'      => $phone,
+    'pg_user_email'      => $order->primary_email,
+    'pg_user_contact_email'  => $order->primary_email,
+  ];
+  
+  $params['pg_description'] = "\r\n";
+  foreach($order->products as $product) {
+    $params['pg_description'] .= $product->title .' x'. $product->qty .", \r\n";
+  }
+  
+  if( variable_get('uc_platron_test_mode', 1)!=1 ) {
+    $platron_currencies = ['RUB', 'USD', 'EUR', 'KZT'];
+    if( in_array($order->currency, $platron_currencies) ) {
+      $params['pg_currency'] = $order->currency;
+    } else {
+      $params['pg_currency'] = 'KZT';
+    }  
+  }
+  
+  // Signature
+  module_load_include('class', 'uc_platron', 'PG_Signature');
+  $thisScriptName = 'payment.php';
+  $params['pg_sig'] = PG_Signature::make($thisScriptName, $params, variable_get('uc_platron_msec', ''));
+
+  foreach ($params as $key=>$value) {
+    $form[$key] = array(
+      '#type'    => 'hidden',
+      '#value'  => $value,
+    );
+  }  
+ 
+  $form['#action'] = 'https://paybox.kz/'. $thisScriptName;
+  $form['submit'] = array(
+    '#name'    => '',
+    '#type'    => 'submit',
+    '#value'  => t('Submit'),
+  );
+  $form['#token'] = FALSE;
+  $form['#pre_render'][] = 'platron_clean_form';
+
+  return $form;
+}
+
+function platron_clean_form($form) {
+  unset($form['form_id']);
+  unset($form['form_build_id']);
+  
+  return $form;
+}

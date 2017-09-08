@@ -1,0 +1,59 @@
+<?php
+
+/**
+ * @file
+ * Installation file for Platron.
+ 
+/**
+ * Implements hook_install().
+ */
+function uc_platron_install() {
+  $t = get_t();
+ 
+  db_merge('uc_order_statuses')
+  ->key(array('order_status_id' => 'platron_inited'))
+  ->insertFields(array(
+    'order_status_id' => 'platron_inited',
+    'title' => $t('Platron inited'),
+    'state' => 'post_checkout',
+    'weight' => 11,
+    'locked' => 1,
+  ))
+  ->updateFields(array(
+    'state' => 'post_checkout',
+    'locked' => 1,
+  ))
+  ->execute(); 
+  
+  db_merge('uc_order_statuses')
+  ->key(array('order_status_id' => 'platron_ready_for_pay'))
+  ->insertFields(array(
+    'order_status_id' => 'platron_ready_for_pay',
+    'title' => $t('Platron ready for pay'),
+    'state' => 'post_checkout',
+    'weight' => 12,
+    'locked' => 0,
+  ))
+  ->updateFields(array(
+    'state' => 'post_checkout',
+    'locked' => 0,
+  ))
+  ->execute(); 
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function uc_platron_uninstall() {
+
+  db_update('uc_order_statuses')
+  ->fields(array(
+    'locked' => 0,
+  ))
+  ->condition('order_status_id', 'platron_inited')
+  ->execute();
+
+  db_delete('variable')
+  ->condition('name', 'uc_platron_%', 'LIKE')
+  ->execute();
+}
