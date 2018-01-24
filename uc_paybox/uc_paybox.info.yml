@@ -1,0 +1,8 @@
+name: UC Paybox
+type: module
+description: 'Paybox payment module for UberCart Drupal 8'
+package: Ubercart - payment
+version: 1.0
+core: 8.x
+dependencies:
+ - uc_payment

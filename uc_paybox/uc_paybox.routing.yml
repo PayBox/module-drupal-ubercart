@@ -1,0 +1,41 @@
+uc_paybox.check:
+  path: /uc_paybox/check
+  defaults:
+    _controller: '\Drupal\uc_paybox\Controller\PayboxOrder::checkOrder'
+  requirements:
+    _permission: 'access content'
+
+uc_paybox.clearing:
+  path: /uc_paybox/clear
+  defaults:
+    _controller: '\Drupal\uc_paybox\Controller\PayboxOrder::clearOrder'
+  requirements:
+    _access: 'TRUE'
+
+uc_paybox.refund:
+  path: /uc_paybox/refund
+  defaults:
+    _controller: '\Drupal\uc_paybox\Controller\PayboxOrder::refundOrder'
+  requirements:
+    _permission: 'access content'
+
+uc_paybox.result:
+  path: /uc_paybox/result
+  defaults:
+    _controller: '\Drupal\uc_paybox\Controller\PayboxOrder::resultOrder'
+  requirements:
+    _access: 'TRUE'
+
+uc_paybox.success:
+  path: '/uc_paybox/success'
+  defaults:
+    _controller: '\Drupal\uc_paybox\Controller\PayboxOrder::successOrder'
+  requirements:
+    _access: 'TRUE'
+
+uc_paybox.failure:
+  path: '/uc_paybox/failure'
+  defaults:
+    _controller: '\Drupal\uc_paybox\Controller\PayboxOrder::failureOrder'
+  requirements:
+    _access: 'TRUE'
