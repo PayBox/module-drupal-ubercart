@@ -94,9 +94,7 @@ abstract class DataContainer {
         if(get_called_class() == 'Drupal\uc_paybox\Paybox\Payment') {
             $request['pg_xml'] = $this->xml->asXML();
             $dom = new \DOMDocument();
-            $server = ((bool) $this->xml->pg_testing_mode)
-                ? 'http://test.paybox.money/'
-                : 'https://paybox.kz/';
+            $server = 'https://api.paybox.money/';
             if($curl = curl_init()) {
                 curl_setopt($curl, CURLOPT_URL, $server.$script);
                 curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 2);
